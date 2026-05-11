@@ -4,15 +4,13 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'APIキーが設定されていません' });
+  if (!apiKey) return res.status(200).json({ error: 'APIキー未設定' });
 
-  const { prompt } = req.body;
-  if (!prompt) return res.status(400).json({ error: 'promptが必要です' });
+  const { prompt } = req.body || {};
+  if (!prompt) return res.status(200).json({ error: 'promptなし' });
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -23,27 +21,25 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        system: `あなたは日本の不動産専門家です。ユーザーの条件に合う実在する可能性の高い物件を提案してください。
-必ず以下のJSON形式のみで返してください。説明・前置き・マークダウン記号は一切不要です。
-lat/lngは東京都内の実際の座標を入れてください（緯度35.6〜35.8、経度139.6〜139.9の範囲）。
-
-{"properties":[{"title":"物件名","address":"住所","price":"価格","area":面積数値,"type":"種別","rooms":"間取り","station":"最寄り駅 徒歩XX分","tags":["特徴1","特徴2"],"match_score":マッチ度0から100,"match_reasons":["理由1","理由2"],"url":"","lat":緯度,"lng":経度,"source":"提案"}]}`,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        system: '不動産の専門家です。条件に合う物件をJSON形式のみで返してください。説明不要。\n{"properties":[{"title":"物件名","address":"住所","price":"価格","area":面積数値,"type":"種別","rooms":"間取り","station":"最寄り駅","tags":["特徴"],"match_score":80,"match_reasons":["理由"],"url":"","lat":35.69,"lng":139.70,"source":"提案"}]}',
         messages: [{ role: 'user', content: prompt }],
       }),
     });
 
     const data = await response.json();
-    const text = (data.content || [])
-      .filter(c => c.type === 'text')
-      .map(c => c.text)
-      .join('');
+
+    if (data.type === 'error') {
+      return res.status(200).json({ error: `APIエラー: ${data.error?.message}` });
+    }
+
+    const text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+    if (!text) return res.status(200).json({ error: `応答なし: ${JSON.stringify(data).slice(0, 300)}` });
 
     return res.status(200).json({ text });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: err.message });
+    return res.status(200).json({ error: `例外: ${err.message}` });
   }
 }
