@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI不動産探索</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Space+Grotesk:wght@400;600;700&display=swap');
+
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Noto Sans JP',sans-serif;background:#080e1c;color:#c8d4f0;display:flex;flex-direction:column;}
+
+/* ─── Header ─── */
+header{
+  background:rgba(8,14,28,.95);
+  border-bottom:1px solid #1a2a50;
+  padding:0 24px;
+  height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;z-index:200;
+  backdrop-filter:blur(8px);
+}
+.logo{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;color:#fff;display:flex;align-items:center;gap:8px;}
+.logo-dot{width:8px;height:8px;background:#3a9eff;border-radius:50%;box-shadow:0 0 10px #3a9eff;}
+.header-right{display:flex;align-items:center;gap:16px;}
+#hit-badge{display:none;font-size:12px;font-weight:600;padding:3px 10px;background:#0f2040;border:1px solid #2a4a80;border-radius:20px;color:#4a9eff;}
+
+/* ─── Layout ─── */
+.layout{display:flex;flex:1;overflow:hidden;}
+
+/* ─── Sidebar ─── */
+.sidebar{
+  width:390px;flex-shrink:0;
+  background:#0b1020;
+  border-right:1px solid #151f3a;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.sidebar-body{overflow-y:auto;flex:1;}
+.sidebar-body::-webkit-scrollbar{width:3px;}
+.sidebar-body::-webkit-scrollbar-thumb{background:#1e3060;border-radius:2px;}
+
+/* ─── Form ─── */
+.form-wrap{padding:18px 20px;border-bottom:1px solid #111a30;}
+.form-head{font-size:10px;letter-spacing:3px;color:#3a6090;margin-bottom:14px;text-transform:uppercase;}
+.field{margin-bottom:11px;}
+.field label{display:block;font-size:11px;color:#4a6890;margin-bottom:4px;letter-spacing:.5px;}
+.field input,.field select,.field textarea{
+  width:100%;background:#060c18;border:1px solid #1a2a4a;border-radius:4px;
+  padding:9px 12px;color:#c8d4f0;font-family:'Noto Sans JP',sans-serif;font-size:13px;
+  outline:none;transition:border-color .2s,box-shadow .2s;
+}
+.field input:focus,.field select:focus,.field textarea:focus{
+  border-color:#3a7eff;box-shadow:0 0 0 2px rgba(58,126,255,.12);
+}
+.field select{cursor:pointer;}
+.field select option{background:#0b1020;}
+.field textarea{resize:vertical;min-height:72px;line-height:1.6;}
+.field-row{display:flex;gap:10px;}
+.field-row .field{flex:1;}
+
+.search-btn{
+  width:100%;margin-top:6px;padding:13px;
+  background:linear-gradient(135deg,#1050cc,#3a8aff);
+  border:none;border-radius:5px;
+  color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;letter-spacing:2px;
+  cursor:pointer;transition:all .2s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.search-btn:hover{background:linear-gradient(135deg,#1a60dd,#4a9aff);box-shadow:0 4px 20px rgba(58,138,255,.3);}
+.search-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}
+
+/* ─── Loading ─── */
+.loading{padding:32px 20px;text-align:center;}
+.ld-wrap{display:flex;justify-content:center;gap:6px;margin-bottom:16px;}
+.ld-dot{width:8px;height:8px;background:#3a7eff;border-radius:50%;animation:ldpulse 1.2s infinite;}
+.ld-dot:nth-child(2){animation-delay:.15s;background:#3abfff;}
+.ld-dot:nth-child(3){animation-delay:.3s;background:#3affcc;}
+@keyframes ldpulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.5);opacity:.4}}
+.ld-text{font-size:12px;color:#3a6090;letter-spacing:1px;line-height:1.7;}
+.ld-step{font-size:11px;color:#2a4a70;margin-top:6px;}
+
+/* ─── Results header ─── */
+.res-header{
+  padding:14px 20px;background:#060d1a;
+  border-bottom:1px solid #0f1c32;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:10;
+}
+.res-count{font-size:14px;color:#5a7898;}
+.res-count strong{color:#4ab0ff;font-family:'Space Grotesk',sans-serif;font-size:18px;margin-right:3px;}
+
+/* ─── Result Card ─── */
+.result-card{
+  padding:20px 22px;
+  border-bottom:1px solid #0d1828;
+  cursor:pointer;transition:background .15s;
+  border-left:4px solid transparent;
+}
+.result-card:hover{background:#0c1828;}
+.result-card.active{background:#0c2040;border-left-color:#4ab0ff;}
+
+/* Rank + title */
+.card-num{
+  font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:700;
+  color:#3a6080;letter-spacing:1px;margin-bottom:6px;
+}
+.card-title{font-size:16px;font-weight:600;color:#e8f0ff;line-height:1.5;margin-bottom:10px;}
+
+/* Price — big and clear */
+.card-price{
+  font-size:22px;font-weight:700;color:#4ab0ff;
+  font-family:'Space Grotesk',sans-serif;margin-bottom:12px;
+}
+
+/* Two key info lines only */
+.card-info{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;}
+.info-row{display:flex;align-items:flex-start;gap:8px;font-size:14px;color:#7a9abb;line-height:1.5;}
+.info-row span:first-child{flex-shrink:0;}
+
+/* Match score — simple and large */
+.match-wrap{display:flex;align-items:center;gap:12px;}
+.match-score-big{
+  font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;
+  line-height:1;min-width:52px;
+}
+.match-right{flex:1;}
+.match-label-sm{font-size:11px;color:#3a5878;margin-bottom:5px;letter-spacing:.5px;}
+.match-track{height:6px;background:#0d1828;border-radius:3px;overflow:hidden;}
+.match-fill{height:100%;border-radius:3px;transition:width .6s ease;}
+
+/* ─── Empty / Error ─── */
+.empty{padding:48px 24px;text-align:center;}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.4;}
+.empty-text{font-size:13px;color:#2a4060;line-height:1.8;}
+
+.err-box{margin:14px 20px;padding:12px 16px;background:#1a080a;border-left:3px solid #ff4a5a;border-radius:2px;font-size:12px;color:#ff7080;line-height:1.7;}
+
+/* ─── Map ─── */
+#map{flex:1;}
+
+/* Leaflet dark popup */
+.leaflet-popup-content-wrapper{
+  background:#0b1020!important;border:1px solid #1e3060!important;
+  color:#c8d4f0!important;border-radius:6px!important;box-shadow:0 8px 30px rgba(0,0,0,.6)!important;
+}
+.leaflet-popup-tip{background:#0b1020!important;}
+.leaflet-popup-close-button{color:#3a6090!important;}
+.pop-title{font-size:13px;font-weight:600;color:#3a9eff;margin-bottom:5px;line-height:1.4;}
+.pop-price{font-size:15px;font-weight:700;color:#fff;margin-bottom:5px;font-family:'Space Grotesk',sans-serif;}
+.pop-detail{font-size:11px;color:#5a7898;line-height:1.7;}
+.pop-score{font-size:11px;color:#3affaa;margin-top:5px;font-weight:600;}
+.pop-link{display:block;margin-top:6px;font-size:11px;color:#3a7eff;text-decoration:none;}
+
+/* ─── Marker styles ─── */
+.custom-marker{width:36px;height:36px;display:flex;align-items:center;justify-content:center;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    AI不動産探索
+  </div>
+  <div class="header-right">
+    <div id="hit-badge"></div>
+    <div style="font-size:11px;color:#2a4060;letter-spacing:1px;">WEB検索 × MAP</div>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-body">
+      <!-- Form -->
+      <div class="form-wrap">
+        <div class="form-head">🔍 検索条件</div>
+
+        <div class="field">
+          <label>エリア・地域</label>
+          <input type="text" id="f-area" placeholder="例：東京23区、渋谷区、港区湾岸" value="新宿〜池袋エリア（新宿区・豊島区付近）">
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>物件種別</label>
+            <select id="f-type">
+              <option value="">すべて</option>
+              <option value="マンション">マンション</option>
+              <option value="一戸建て">一戸建て</option>
+              <option value="倉庫・工場">倉庫・工場</option>
+              <option value="事務所・店舗">事務所・店舗</option>
+              <option value="ビル一棟">ビル一棟</option>
+              <option value="土地">土地</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>取引種別</label>
+            <select id="f-deal">
+              <option value="すべて">すべて</option>
+              <option value="購入">購入</option>
+              <option value="賃貸">賃貸</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>最小面積（㎡）</label>
+            <input type="number" id="f-area-min" placeholder="例：300" value="300">
+          </div>
+          <div class="field">
+            <label>予算上限</label>
+            <input type="text" id="f-budget" placeholder="例：1億円、30万/月">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>特殊条件・こだわり</label>
+          <textarea id="f-special" placeholder="例：音が出せる環境、大空間（ワンフロア）、天井高あり、コンサート・礼拝向き、準工業地域...">音が出せる環境、大空間（ワンフロア）、天井高あり、コンサート・礼拝向き</textarea>
+        </div>
+
+        <button class="search-btn" id="search-btn" onclick="doSearch()">
+          <span>🔍</span><span>AIでWeb検索する</span>
+        </button>
+      </div>
+
+      <!-- Results -->
+      <div id="results-area">
+        <div class="empty">
+          <div class="empty-icon">🗺️</div>
+          <div class="empty-text">条件を設定して<br>「AIでWeb検索する」を押すと<br>実際の物件を探してマップに表示します。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div id="map"></div>
+</div>
+
+<script>
+// ── Map setup ──────────────────────────────────────────
+const map = L.map('map', { zoomControl: false }).setView([35.6895, 139.6917], 11);
+
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap © CARTO',
+  maxZoom: 19,
+}).addTo(map);
+
+let markers = [];
+let properties = [];
+
+function clearMarkers() {
+  markers.forEach(m => m.remove());
+  markers = [];
+}
+
+function scoreColor(s) {
+  if (s >= 80) return '#3affaa';
+  if (s >= 65) return '#3ab0ff';
+  if (s >= 50) return '#ffcc3a';
+  return '#ff7a3a';
+}
+
+function makeIcon(rank, score) {
+  const c = scoreColor(score);
+  return L.divIcon({
+    html: `<div style="
+      width:34px;height:34px;border-radius:50% 50% 50% 2px;
+      background:${c};transform:rotate(-45deg);
+      border:2px solid rgba(255,255,255,.25);
+      box-shadow:0 4px 14px rgba(0,0,0,.6),0 0 0 3px ${c}30;
+      display:flex;align-items:center;justify-content:center;
+    "><span style="transform:rotate(45deg);font-size:12px;font-weight:800;color:#000;font-family:'Space Grotesk',sans-serif;">${rank}</span></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -36],
+    className: '',
+  });
+}
+
+function popupHtml(p, i) {
+  return `
+    <div style="min-width:210px;max-width:260px;">
+      <div class="pop-title">#${i+1} ${p.title}</div>
+      <div class="pop-price">${p.price || '価格応相談'}</div>
+      <div class="pop-detail">
+        ${[p.type, p.rooms, p.area ? p.area+'㎡' : ''].filter(Boolean).join(' · ')}<br>
+        ${p.station || p.address || ''}
+      </div>
+      <div class="pop-score">マッチ度 ${p.match_score || '--'}/100</div>
+      ${p.url ? `<a class="pop-link" href="${p.url}" target="_blank">詳細ページを見る →</a>` : ''}
+    </div>
+  `;
+}
+
+function addMarkers(props) {
+  clearMarkers();
+  const valid = props.filter(p => p.lat && p.lng);
+  valid.forEach((p, i) => {
+    const rank = props.indexOf(p) + 1;
+    const m = L.marker([p.lat, p.lng], { icon: makeIcon(rank, p.match_score || 50) })
+      .addTo(map)
+      .bindPopup(popupHtml(p, rank - 1), { maxWidth: 280 });
+    m.on('click', () => activateCard(props.indexOf(p)));
+    markers.push(m);
+  });
+  if (valid.length > 0) {
+    const group = L.featureGroup(markers);
+    map.fitBounds(group.getBounds().pad(0.2));
+  }
+}
+
+// ── Card interactions ──────────────────────────────────
+function activateCard(idx) {
+  document.querySelectorAll('.result-card').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+  const p = properties[idx];
+  if (p && p.lat && p.lng) {
+    map.setView([p.lat, p.lng], 14, { animate: true });
+    const markerIdx = markers.findIndex((_, mi) => {
+      const sorted = [...properties].sort((a,b)=>(b.match_score||0)-(a.match_score||0));
+      return sorted[mi] === p;
+    });
+    // just open the corresponding marker popup
+    markers.forEach((m, mi) => {
+      const allProps = [...properties].sort((a,b)=>(b.match_score||0)-(a.match_score||0));
+      if (allProps[mi] === p) m.openPopup();
+    });
+  }
+  document.querySelectorAll('.result-card')[idx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Render results ─────────────────────────────────────
+function renderResults(props) {
+  const area = document.getElementById('results-area');
+  if (!props || props.length === 0) {
+    area.innerHTML = `<div class="err-box">条件に合う物件が見つかりませんでした。<br>条件を変えて再試行してください。</div>`;
+    return;
+  }
+
+  const sorted = [...props].sort((a,b) => (b.match_score||0) - (a.match_score||0));
+  properties = sorted;
+
+  const header = `
+    <div class="res-header">
+      <div class="res-count"><strong>${sorted.length}</strong> 件ヒット</div>
+      <div class="res-sort">▼ マッチ度順</div>
+    </div>`;
+
+  const cards = sorted.map((p, i) => {
+    const sc = p.match_score || 0;
+    const sc_color = scoreColor(sc);
+    const fillGrad = `background:linear-gradient(90deg,${sc_color}99,${sc_color})`;
+
+    return `
+    <div class="result-card ${i===0?'active':''}" onclick="activateCard(${i})">
+      <div class="card-num"># ${i+1}${p.source ? '  ·  ' + p.source : ''}</div>
+      <div class="card-title">${p.title || '物件'}</div>
+      <div class="card-price">${p.price || '価格応相談'}</div>
+
+      <div class="card-info">
+        ${p.address ? `<div class="info-row"><span>📍</span><span>${p.address}</span></div>` : ''}
+        ${p.station ? `<div class="info-row"><span>🚉</span><span>${p.station}</span></div>` : ''}
+        ${[p.type, p.area ? p.area+'㎡' : null, p.rooms].filter(Boolean).length
+          ? `<div class="info-row"><span>🏢</span><span>${[p.type, p.area ? p.area+'㎡' : null, p.rooms].filter(Boolean).join('　')}</span></div>`
+          : ''}
+      </div>
+
+      <div class="match-wrap">
+        <div class="match-score-big" style="color:${sc_color}">${sc}</div>
+        <div class="match-right">
+          <div class="match-label-sm">条件マッチ度 / 100</div>
+          <div class="match-track"><div class="match-fill" style="width:${sc}%;${fillGrad}"></div></div>
+        </div>
+      </div>
+
+      ${p.url ? `<a class="card-link" href="${p.url}" target="_blank" onclick="event.stopPropagation()" style="display:inline-block;margin-top:14px;font-size:13px;color:#3a80ff;text-decoration:none;padding:6px 12px;border:1px solid #1a4080;border-radius:4px;">🔗 詳細を見る</a>` : ''}
+    </div>`;
+  }).join('');
+
+  area.innerHTML = header + cards;
+}
+
+// ── Auto-search (debounce) ─────────────────────────────
+let debounceTimer = null;
+let currentReqId = 0;
+
+function scheduleSearch(delay = 1500) {
+  clearTimeout(debounceTimer);
+  const btn = document.getElementById('search-btn');
+  // Show countdown hint on button if not already searching
+  if (!btn.disabled) {
+    btn.innerHTML = '<span>⏱</span><span>条件変更を検知中...</span>';
+  }
+  debounceTimer = setTimeout(() => {
+    if (!btn.disabled) doSearch();
+  }, delay);
+}
+
+// Attach listeners after DOM ready
+window.addEventListener('DOMContentLoaded', () => {
+  // Selects: fire immediately
+  ['f-type', 'f-deal'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => scheduleSearch(300));
+  });
+  // Text inputs: debounce 1.5s
+  ['f-area', 'f-area-min', 'f-budget'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => scheduleSearch(1500));
+  });
+  // Textarea: debounce 2s
+  document.getElementById('f-special')?.addEventListener('input', () => scheduleSearch(2000));
+});
+
+// ── AI Search ──────────────────────────────────────────
+async function doSearch() {
+  const reqId = ++currentReqId;
+  const btn = document.getElementById('search-btn');
+  const area = document.getElementById('results-area');
+  const badge = document.getElementById('hit-badge');
+
+  const cond = {
+    area: document.getElementById('f-area').value.trim() || '東京23区',
+    type: document.getElementById('f-type').value,
+    deal: document.getElementById('f-deal').value,
+    minArea: document.getElementById('f-area-min').value,
+    budget: document.getElementById('f-budget').value.trim(),
+    special: document.getElementById('f-special').value.trim(),
+  };
+
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span><span>AI検索中...</span>';
+  badge.style.display = 'none';
+  clearMarkers();
+
+  area.innerHTML = `
+    <div class="loading">
+      <div class="ld-wrap"><span class="ld-dot"></span><span class="ld-dot"></span><span class="ld-dot"></span></div>
+      <div class="ld-text">AIがWebを検索中です...</div>
+      <div class="ld-step" id="ld-step">SUUMO / HOME'S / アットホーム などを確認中</div>
+    </div>`;
+
+  const steps = ['物件情報を収集中...','条件との照合中...','座標データを解析中...','結果を整理中...'];
+  let si = 0;
+  const stepTimer = setInterval(() => {
+    si = (si+1) % steps.length;
+    const el = document.getElementById('ld-step');
+    if(el) el.textContent = steps[si];
+  }, 2500);
+
+  const prompt = `以下の不動産検索条件でWebを検索し、実際の物件情報を探してください。
+
+【検索条件】
+- エリア: ${cond.area}
+- 物件種別: ${cond.type || 'すべて'}
+- 取引種別: ${cond.deal}
+- 最小面積: ${cond.minArea ? cond.minArea + '㎡以上' : '指定なし'}
+- 予算: ${cond.budget || '指定なし'}
+- 特殊条件・希望: ${cond.special || '特になし'}
+
+SUUMO、HOME'S、アットホーム、楽待、物件ドットコム、LoopNet、倉庫専門サイトなどで検索し、条件に合う物件を5〜10件見つけてください。
+
+以下のJSONのみを返してください（前置きや説明は一切不要）:
+
+{
+  "properties": [
+    {
+      "title": "物件の具体的な名称・説明",
+      "address": "住所（区・町名レベルまで）",
+      "price": "価格または月額賃料（例：8,500万円、35万円/月）",
+      "area": 面積の数値（㎡・数字のみ）,
+      "type": "物件種別",
+      "rooms": "間取り（あれば）",
+      "station": "最寄り駅 徒歩XX分",
+      "tags": ["特徴1","特徴2","特徴3"],
+      "match_score": 条件へのマッチ度0〜100の整数,
+      "match_reasons": ["マッチ理由1（具体的に）","マッチ理由2"],
+      "url": "物件掲載ページのURL",
+      "lat": 緯度（例：35.6895）,
+      "lng": 経度（例：139.6917）,
+      "source": "情報源サイト名"
+    }
+  ]
+}`;
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+
+    clearInterval(stepTimer);
+
+    const data = await res.json();
+    const rawText = data.content?.map(c => c.type === 'text' ? c.text : '').join('') || '';
+
+    // ── Robust JSON extraction & repair ──
+    let parsed;
+
+    function extractAndRepairJson(text) {
+      // 1. Strip markdown fences
+      text = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+      // 2. Find outermost { ... } containing "properties"
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start === -1 || end === -1) throw new Error('JSONブロックが見つかりません');
+      let json = text.slice(start, end + 1);
+
+      // 3. Try direct parse first
+      try { return JSON.parse(json); } catch (_) {}
+
+      // 4. Repair: fix trailing commas, truncated arrays/objects
+      json = json
+        .replace(/,\s*([}\]])/g, '$1')          // trailing commas
+        .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // unquoted keys
+        .replace(/:\s*'([^']*)'/g, ': "$1"');    // single-quoted strings
+
+      try { return JSON.parse(json); } catch (_) {}
+
+      // 5. Find "properties" array and extract items one by one
+      const propStart = json.indexOf('"properties"');
+      if (propStart === -1) throw new Error('propertiesキーが見つかりません');
+      const arrStart = json.indexOf('[', propStart);
+      if (arrStart === -1) throw new Error('配列が見つかりません');
+
+      // Extract each {...} object in the array
+      const items = [];
+      let depth = 0, inStr = false, escape = false, objStart = -1;
+      for (let i = arrStart + 1; i < json.length; i++) {
+        const ch = json[i];
+        if (escape) { escape = false; continue; }
+        if (ch === '\\' && inStr) { escape = true; continue; }
+        if (ch === '"') { inStr = !inStr; continue; }
+        if (inStr) continue;
+        if (ch === '{') { if (depth === 0) objStart = i; depth++; }
+        else if (ch === '}') {
+          depth--;
+          if (depth === 0 && objStart !== -1) {
+            try { items.push(JSON.parse(json.slice(objStart, i + 1))); } catch (_) {}
+            objStart = -1;
+          }
+        } else if (ch === ']' && depth === 0) break;
+      }
+      if (items.length === 0) throw new Error('物件データを抽出できませんでした');
+      return { properties: items };
+    }
+
+    parsed = extractAndRepairJson(rawText);
+
+    // Ignore if a newer search has started
+    if (reqId !== currentReqId) return;
+
+    const props = parsed.properties || [];
+    renderResults(props);
+    addMarkers(props);
+
+    badge.style.display = 'inline-block';
+    badge.textContent = `${props.length}件ヒット`;
+
+  } catch (err) {
+    clearInterval(stepTimer);
+    if (reqId !== currentReqId) return;
+    console.error(err);
+    area.innerHTML = `<div class="err-box">⚠️ エラーが発生しました<br>${err.message}<br><br>しばらくしてから再試行してください。</div>`;
+  }
+
+  if (reqId === currentReqId) {
+    btn.disabled = false;
+    btn.innerHTML = '<span>🔍</span><span>AIでWeb検索する</span>';
+  }
+}
+</script>
+</body>
+</html>
